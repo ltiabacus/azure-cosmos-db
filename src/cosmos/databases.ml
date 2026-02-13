@@ -725,6 +725,7 @@ module Database (Auth_key : Auth_key) = struct
                 let%lwt result = value () in
                 Lwt.return_ok (expected_code, response_header, result)
               else 
+                let%lwt body_string = body_to_string body in 
                 print_endline body_string;
                 Lwt.return_error (Azure_error (code, response_header))
             in
