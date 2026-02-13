@@ -724,7 +724,9 @@ module Database (Auth_key : Auth_key) = struct
               if code = expected_code then
                 let%lwt result = value () in
                 Lwt.return_ok (expected_code, response_header, result)
-              else Lwt.return_error (Azure_error (code, response_header))
+              else 
+                print_endline body_string;
+                Lwt.return_error (Azure_error (code, response_header))
             in
             let%lwt () = Cohttp_lwt.Body.drain_body body in
             result
