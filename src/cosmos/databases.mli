@@ -199,7 +199,21 @@ module Database (Auth_key : Auth_key) : sig
         ?timeout:float ->
         string ->
         string ->
-        Json_converter_t.query ->
+        Json_converter_j.query ->
+        (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
+
+      val query_custom_parameters :
+        ?max_item_count:int ->
+        ?continuation:string ->
+        ?consistency_level:string ->
+        ?session_token:string ->
+        ?is_partition:bool ->
+        ?partition_key:string ->
+        ?timeout:float ->
+        string_of_query:('a -> string) ->
+        string ->
+        string ->
+        'a ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
     end
   end

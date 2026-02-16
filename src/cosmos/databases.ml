@@ -676,8 +676,9 @@ module Database (Auth_key : Auth_key) = struct
         in
         take_first chunk_size [] doc_ids
 
-      let query ?max_item_count ?continuation ?consistency_level ?session_token
-          ?is_partition ?partition_key ?timeout dbname coll_name query =
+      let query_custom_parameters ?max_item_count ?continuation
+          ?consistency_level ?session_token ?is_partition ?partition_key
+          ?timeout ~string_of_query dbname coll_name query =
         let headers s =
           let h = headers Account.Docs Utilities.Verb.Post s in
           Cohttp.Header.add h "x-ms-documentdb-isquery"
@@ -702,9 +703,8 @@ module Database (Auth_key : Auth_key) = struct
         in
         let path = "/dbs/" ^ dbname ^ "/colls/" ^ coll_name ^ "/docs" in
         let headers = headers ("dbs/" ^ dbname ^ "/colls/" ^ coll_name) in
-        let body =
-          Json_converter_j.string_of_query query |> Cohttp_lwt.Body.of_string
-        in
+        let body = string_of_query query |> Cohttp_lwt.Body.of_string in
+        print_endline ("query: " ^ string_of_query query);
         let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
         let response =
           Cohttp_lwt_unix.Client.post ~headers ~body uri
@@ -724,12 +724,24 @@ module Database (Auth_key : Auth_key) = struct
               if code = expected_code then
                 let%lwt result = value () in
                 Lwt.return_ok (expected_code, response_header, result)
-              else 
+              else
+                let%lwt body_string = body_to_string body in
                 print_endline body_string;
+                print_endline
+                  ("continuation: "
+                  ^ (response_header |> Response_headers.x_ms_continuation
+                    |> Option.value ~default:"None"));
                 Lwt.return_error (Azure_error (code, response_header))
             in
             let%lwt () = Cohttp_lwt.Body.drain_body body in
             result
+
+      let query ?max_item_count ?continuation ?consistency_level ?session_token
+          ?is_partition ?partition_key ?timeout dbname coll_name query =
+        query_custom_parameters ?max_item_count ?continuation ?consistency_level
+          ?session_token ?is_partition ?partition_key ?timeout
+          ~string_of_query:Json_converter_j.string_of_query dbname coll_name
+          query
     end
   end
 
