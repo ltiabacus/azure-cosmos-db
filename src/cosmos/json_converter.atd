@@ -124,3 +124,23 @@ type list_permissions = {
   permissions <json name="Permissions">: permission list;
   count <json name="_count">: int;
 }
+
+type create_stored_procedure = {
+  id: string;
+  body: string;
+}
+
+type stored_procedure = {
+  id: string;
+  rid <json name="_rid">: string;
+  ts <json name="_ts">: int;
+  self <json name="_self">: string;
+  etag <json name="_etag">: string;
+  body: string;
+}
+
+type list_stored_procedures = {
+  rid <json name="_rid">: string;
+  stored_procedures <json name="StoredProcedures">: stored_procedure list;
+  count <json name="_count">: int;
+}

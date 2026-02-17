@@ -24,7 +24,7 @@ module type Auth_key = sig
 end
 
 module type Account = sig
-  type resource = Dbs | Colls | Docs | Users | Permissions
+  type resource = Dbs | Colls | Docs | Users | Permissions | Sprocs
 
   val authorization :
     Utilities.Verb.t -> resource -> Utilities.Ms_time.t -> string -> string
@@ -33,7 +33,7 @@ module type Account = sig
 end
 
 module Auth (Keys : Auth_key) : Account = struct
-  type resource = Dbs | Colls | Docs | Users | Permissions
+  type resource = Dbs | Colls | Docs | Users | Permissions | Sprocs
 
   let string_of_resource = function
     | Dbs -> "dbs"
@@ -41,6 +41,7 @@ module Auth (Keys : Auth_key) : Account = struct
     | Docs -> "docs"
     | Users -> "users"
     | Permissions -> "permissions"
+    | Sprocs -> "sprocs"
 
   let authorization verb resource date db_name =
     (* "type=master&ver=1.0&sig=" ^ key *)
@@ -725,7 +726,7 @@ module Database (Auth_key : Auth_key) = struct
                 let%lwt result = value () in
                 Lwt.return_ok (expected_code, response_header, result)
               else
-                let%lwt body_string = body_to_string body in 
+                let%lwt body_string = body_to_string body in
                 print_endline body_string;
                 print_endline
                   ("continuation: "
@@ -742,6 +743,93 @@ module Database (Auth_key : Auth_key) = struct
           ?session_token ?is_partition ?partition_key ?timeout
           ~string_of_query:Json_converter_j.string_of_query dbname coll_name
           query
+    end
+
+    module Stored_procedure = struct
+      let create ?timeout dbname coll_name ~id ~body:sproc_body =
+        let body =
+          ({ id; body = sproc_body } : Json_converter_j.create_stored_procedure)
+          |> Json_converter_j.string_of_create_stored_procedure
+          |> Cohttp_lwt.Body.of_string
+        in
+        let path = Printf.sprintf "/dbs/%s/colls/%s/sprocs" dbname coll_name in
+        let header_path = Printf.sprintf "dbs/%s/colls/%s" dbname coll_name in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Sprocs Utilities.Verb.Post header_path
+        in
+        let response =
+          Cohttp_lwt_unix.Client.post ~headers ~body uri
+          >>= Lwt.return_some |> wrap_timeout timeout
+        in
+        match%lwt response with
+        | None -> timeout_error
+        | Some (resp, body) ->
+            let value body =
+              let%lwt body_string = body_to_string body in
+              Lwt.return
+              @@ Json_converter_j.stored_procedure_of_string body_string
+            in
+            result_or_error_with_result 201 value resp body
+
+      let replace ?timeout dbname coll_name ~id ~body:sproc_body =
+        let body =
+          ({ id; body = sproc_body } : Json_converter_j.create_stored_procedure)
+          |> Json_converter_j.string_of_create_stored_procedure
+          |> Cohttp_lwt.Body.of_string
+        in
+        let path =
+          Printf.sprintf "/dbs/%s/colls/%s/sprocs/%s" dbname coll_name id
+        in
+        let header_path =
+          Printf.sprintf "dbs/%s/colls/%s/sprocs/%s" dbname coll_name id
+        in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Sprocs Utilities.Verb.Put header_path
+        in
+        let response =
+          Cohttp_lwt_unix.Client.put ~headers ~body uri
+          >>= Lwt.return_some |> wrap_timeout timeout
+        in
+        match%lwt response with
+        | None -> timeout_error
+        | Some (resp, body) ->
+            let value body =
+              let%lwt body_string = body_to_string body in
+              Lwt.return
+              @@ Json_converter_j.stored_procedure_of_string body_string
+            in
+            result_or_error_with_result 200 value resp body
+
+      let execute ?timeout ~partition_key dbname coll_name ~id
+          ~(parameters : Yojson.Safe.t list) =
+        let body =
+          Yojson.Safe.to_string (`List parameters) |> Cohttp_lwt.Body.of_string
+        in
+        let path =
+          Printf.sprintf "/dbs/%s/colls/%s/sprocs/%s" dbname coll_name id
+        in
+        let header_path =
+          Printf.sprintf "dbs/%s/colls/%s/sprocs/%s" dbname coll_name id
+        in
+        let uri = Uri.make ~scheme:"https" ~host ~port:443 ~path () in
+        let headers =
+          json_headers Account.Sprocs Utilities.Verb.Post header_path
+          |> Document.apply_to_header_if_some "x-ms-documentdb-partitionkey"
+               Document.string_of_partition_key (Some partition_key)
+        in
+        let response =
+          Cohttp_lwt_unix.Client.post ~headers ~body uri
+          >>= Lwt.return_some |> wrap_timeout timeout
+        in
+        match%lwt response with
+        | None -> timeout_error
+        | Some (resp, body) ->
+            let code = get_code resp in
+            let%lwt body_string = body_to_string body in
+            let%lwt () = Cohttp_lwt.Body.drain_body body in
+            Lwt.return_ok (code, body_string)
     end
   end
 

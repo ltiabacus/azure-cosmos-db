@@ -216,6 +216,39 @@ module Database (Auth_key : Auth_key) : sig
         'a ->
         (int * Response_headers.t * list_result, cosmos_error) result Lwt.t
     end
+
+    module Stored_procedure : sig
+      val create :
+        ?timeout:float ->
+        string ->
+        string ->
+        id:string ->
+        body:string ->
+        (int * Json_converter_t.stored_procedure, cosmos_error) result Lwt.t
+      (** [create dbname coll_name ~id ~body] creates a stored procedure with
+          the given id and JavaScript body in the collection *)
+
+      val replace :
+        ?timeout:float ->
+        string ->
+        string ->
+        id:string ->
+        body:string ->
+        (int * Json_converter_t.stored_procedure, cosmos_error) result Lwt.t
+      (** [replace dbname coll_name ~id ~body] replaces an existing stored
+          procedure with the given id and new JavaScript body *)
+
+      val execute :
+        ?timeout:float ->
+        partition_key:string ->
+        string ->
+        string ->
+        id:string ->
+        parameters:Yojson.Safe.t list ->
+        (int * string, cosmos_error) result Lwt.t
+      (** [execute ~partition_key dbname coll_name ~id ~parameters] executes a
+          stored procedure and returns the response body as a string *)
+    end
   end
 
   module User : sig
